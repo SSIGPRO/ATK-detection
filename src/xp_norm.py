@@ -4,6 +4,9 @@ from numpy.random import randint
 from time import time
 from tqdm import tqdm
 
+import sys
+sys.path.insert(0, '/home/lorenzocapelli/repos/peepholelib')
+
 # Our stuff
 from peepholelib.datasets.cifar import Cifar
 from peepholelib.models.model_wrap import ModelWrap 
@@ -37,8 +40,8 @@ if __name__ == "__main__":
     bs = 512 
     model_dir = '/srv/newpenny/XAI/models'
     model_name = 'LM_model=vgg16_dataset=CIFAR100_augment=True_optim=SGD_scheduler=LROnPlateau.pth'
-    
-    svds_path = Path.cwd()/'../data'
+    print(Path.cwd())
+    svds_path = Path.cwd()/f'../../../XAI/generated_data/svds/{dataset}/{name_model}'
     svds_name = 'svds' 
     
     cvs_path = Path.cwd()/'../data/corevectors'
@@ -76,10 +79,10 @@ if __name__ == "__main__":
 
     target_layers = [
             'classifier.0',
-            # 'classifier.3',
+            'classifier.3',
             #'features.7',
-            #'features.14',
-            #'features.28',
+            'features.14',
+            'features.28',
             ]
     model.set_target_layers(target_layers=target_layers, verbose=verbose)
 
@@ -128,7 +131,7 @@ if __name__ == "__main__":
     # CoreVectors 
     #--------------------------------
     atk_loaders = {key: DataLoader(value, batch_size=bs, collate_fn = lambda x: x, shuffle=False) for key, value in atk._atkds.items()}
-    trim_loaders = trim_dataloaders(atk_loaders, 0.05)
+    trim_loaders = trim_dataloaders(atk_loaders, 0.001)
     cvs_path_norm = Path(f'/srv/newpenny/XAI/generated_data/corevectors/{dataset}/{name_model}')
     
     corevecs = CoreVectors(

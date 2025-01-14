@@ -3,11 +3,9 @@ from scipy import signal
 from detectors._base import Detector
 # from detectors._auto_regressive import burg
 
-
 class MD(Detector):
-    
-    def __init__(self):
-        super().__init__(None)
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
         
     def fit(self, X_train):
         super().fit(X_train)

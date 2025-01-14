@@ -1,4 +1,3 @@
-import numpy as np
 from detectors._base import Detector
 from sklearn.svm import OneClassSVM
 from sklearn.neighbors import LocalOutlierFactor
@@ -6,9 +5,10 @@ from sklearn.ensemble import IsolationForest
 from sklearn.preprocessing import StandardScaler
 from sklearn.pipeline import make_pipeline
 
-
 class SklearnDetector(Detector):
-        
+    def __init__(self, **kwargs):
+        pass
+
     def fit(self, X_train):
         self.detector = make_pipeline(
                 StandardScaler(),
@@ -22,9 +22,10 @@ class SklearnDetector(Detector):
     
     
 class OCSVM(SklearnDetector):
-    def __init__(self, kernel, nu):
-        self.kernel = kernel
-        self.nu = nu
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.kernel = kwargs['kernel']
+        self.nu = kwargs['nu']
         
     def fit(self, X_train):
         self.detector = make_pipeline(
@@ -36,10 +37,11 @@ class OCSVM(SklearnDetector):
         
     
 class LOF(SklearnDetector):
-    def __init__(self, h):
-        self.h = h # number of neighbors
+    def __init__(self, **kwargs):
+        self.h = kwargs['h'] # number of neighbors
     
     def fit(self, X_train):
+        super().__init__(**kwargs)
         self.detector = make_pipeline(
                 StandardScaler(),
                 LocalOutlierFactor(n_neighbors=self.h, novelty=True)
@@ -49,8 +51,9 @@ class LOF(SklearnDetector):
         
     
 class IF(SklearnDetector):
-    def __init__(self, l):
-        self.l = l # number of estimators
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.l = kwargs['l'] # number of estimators
         
     def fit(self, X_train):
         self.detector = make_pipeline(

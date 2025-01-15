@@ -1,8 +1,9 @@
 import torch
+import numpy as np
 from sklearn.metrics import roc_auc_score
 
 def AUC(scores, n_ori, n_atk):
-    labels = torch.hstack((torch.zeros(n_ori), torch.ones(n_atk)))
+    labels = np.hstack((torch.zeros(n_ori), torch.ones(n_atk)))
     return 1-roc_auc_score(labels, scores)
     
 def P_D(scores):
@@ -22,7 +23,7 @@ class Detector():
         
     def test(self, X_ori, X_atk, metric):
         # concat original and attacked data
-        X_test = torch.cat([X_ori, X_atk])
+        X_test = torch.cat([X_ori, X_atk]).detach().numpy()
         scores = self.score(X_test)
 
         # test the detector in terms of AUC or P_D

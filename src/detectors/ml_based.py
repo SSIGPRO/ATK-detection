@@ -38,10 +38,10 @@ class OCSVM(SklearnDetector):
     
 class LOF(SklearnDetector):
     def __init__(self, **kwargs):
+        super().__init__(**kwargs)
         self.h = kwargs['h'] # number of neighbors
     
     def fit(self, X_train):
-        super().__init__(**kwargs)
         self.detector = make_pipeline(
                 StandardScaler(),
                 LocalOutlierFactor(n_neighbors=self.h, novelty=True)

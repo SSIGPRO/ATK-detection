@@ -19,7 +19,8 @@ class MD(Detector):
     def score(self, X_test):
         # compute the projections on the major subspace
         projections = X_test @ self.Uok   
-        return np.sqrt(np.sum(projections**2 / self.lok, axis=1))
+        ret = np.sqrt(np.sum(projections**2 / self.lok, axis=1))
+        return ret 
     
     
 class AR(Detector):

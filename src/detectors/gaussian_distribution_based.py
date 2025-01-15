@@ -14,7 +14,7 @@ class MD(Detector):
         eigvals, eigvecs = np.linalg.eigh(self.Sok)
         self.lok = eigvals[::-1]
         self.Uok = eigvecs[:, ::-1]
-        return self
+        return
         
     def score(self, X_test):
         # compute the projections on the major subspace
@@ -83,7 +83,7 @@ class AR(Detector):
         else:
             raise ValueError(f'method {method} not supported')
     
-        return self
+        return
         
     def predict(self, x):
         """

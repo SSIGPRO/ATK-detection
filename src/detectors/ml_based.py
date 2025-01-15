@@ -10,55 +10,38 @@ class SklearnDetector(Detector):
         pass
 
     def fit(self, X_train):
-        self.detector = make_pipeline(
-                StandardScaler(),
-                Detector(params)
-        )
         self.detector.fit(X_train)
-        return self
+        return
     
     def score(self, X_test):
         return self.detector.decision_function(X_test)
     
-    
 class OCSVM(SklearnDetector):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        self.kernel = kwargs['kernel']
-        self.nu = kwargs['nu']
-        
-    def fit(self, X_train):
+        self.kwargs = kwargs
         self.detector = make_pipeline(
                 StandardScaler(),
-                OneClassSVM(kernel=self.kernel, nu=self.nu)
-        )
-        self.detector.fit(X_train)
-        return self
-        
+                OneClassSVM(**self.kwargs)
+                )
+        return 
     
 class LOF(SklearnDetector):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        self.h = kwargs['h'] # number of neighbors
-    
-    def fit(self, X_train):
+        self.kwargs = kwargs # number of neighbors
         self.detector = make_pipeline(
                 StandardScaler(),
-                LocalOutlierFactor(n_neighbors=self.h, novelty=True)
-        )
-        self.detector.fit(X_train)
-        return self
-        
+                LocalOutlierFactor(**self.kwargs, novelty=True)
+                )
+        return 
     
 class IF(SklearnDetector):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        self.l = kwargs['l'] # number of estimators
-        
-    def fit(self, X_train):
+        self.kwargs = kwargs # number of estimators
         self.detector = make_pipeline(
                 StandardScaler(),
-                IsolationForest(n_estimators=self.l)
-        )
-        self.detector.fit(X_train)
-        return self
+                IsolationForest(**self.kwargs)
+                )
+        return

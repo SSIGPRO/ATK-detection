@@ -1,21 +1,10 @@
 # python stuff
 import os
 import sys
-sys.path.insert(0, '/home/lorenzocapelli/repos/peepholelib')
+sys.path.insert(0, '/home/lorenzocapelli/repos/peepholelib/peepholelib')
 import numpy as np
-import pandas as pd
-import matplotlib.pyplot as plt
-import abc  
 from pathlib import Path
-import pandas as pd
 from contextlib import ExitStack
-
-# math stuff
-from sklearn.metrics import roc_auc_score
-
-# detectors stuff
-from detectors.ml_based import OCSVM, LOF, IF  
-from detectors.gaussian_distribution_based import MD 
 
 # Attcks
 import torchattacks
@@ -34,8 +23,6 @@ from peepholelib.utils.testing import trim_dataloaders
 
 # torch stuff
 import torch
-from tensordict import TensorDict
-from tensordict import MemoryMappedTensor as MMT
 from torchvision.models import vgg16, VGG16_Weights
 from cuda_selector import auto_cuda
 from torch.utils.data import DataLoader
@@ -50,18 +37,18 @@ if __name__ == '__main__':
     #--------------------------------
     ds_path = '/srv/newpenny/dataset/CIFAR100'
     name_model = 'vgg16'
-    dataset = 'CIFAR100' 
+    dataset = 'CIFAR10' 
     seed = 29
     bs = 64 
     model_dir = '/srv/newpenny/XAI/models'
-    model_name = 'LM_model=vgg16_dataset=CIFAR100_augment=True_optim=SGD_scheduler=LROnPlateau.pth'
+    model_name = 'vgg16_pretrained=True_dataset=CIFAR10-augmented_policy=CIFAR10_seed=29.pth'
 
     verbose = True
 
     svds_path = Path.cwd()/f'../../../XAI/generated_data/svds/{dataset}/{name_model}'
     svds_name = 'svds' 
     
-    cvs_path = Path.cwd()/'../data/corevectors'
+    cvs_path = f'/srv/newpenny/XAI/generated_data/toy_case_{dataset}/corevectors/{dataset}/{name_model}'
     cvs_name = 'corevectors'
 
     #--------------------------------
@@ -90,17 +77,20 @@ if __name__ == '__main__':
     # Attacks
     #--------------------------------
     ds_loaders = ds.get_dataset_loaders()
-    loaders = {'train': ds_loaders['train'],
-              'test': ds_loaders['test']}
-    loaders = trim_dataloaders(loader, 0.01)
+    loaders = {
+              # 'train': ds_loaders['train'],
+              'test': ds_loaders['test']
+              }
+    loaders = trim_dataloaders(loaders, 0.2)
 
-    atcks = {'myPGD':
+    atcks = {
+             'myPGD':
                      {'model': model._model,
                       'eps' : 8/255, 
                       'alpha' : 2/255, 
                       'steps' : 10,
                       'device' : device,
-                      'path' : '/srv/newpenny/XAI/generated_data/toy_case/attacks/PGD',
+                      'path' : f'/srv/newpenny/XAI/generated_data/toy_case_{dataset}/attacks/PGD',
                       'name' : 'PGD',
                       'dl' : loaders,
                       'name_model' : name_model,
@@ -112,7 +102,7 @@ if __name__ == '__main__':
                       'alpha' : 2/255, 
                       'steps' : 10,
                       'device' : device,
-                      'path' : '/srv/newpenny/XAI/generated_data/toy_case/attacks/BIM',
+                      'path' : f'/srv/newpenny/XAI/generated_data/toy_case_{dataset}/attacks/BIM',
                       'name' : 'BIM',
                       'dl' : loaders,
                       'name_model' : name_model,
@@ -121,7 +111,7 @@ if __name__ == '__main__':
              'myCW':{
                       'model': model._model,
                       'device' : device,
-                      'path' : '/srv/newpenny/XAI/generated_data/toy_case/attacks/CW',
+                      'path' : f'/srv/newpenny/XAI/generated_data/toy_case_{dataset}/attacks/CW',
                       'name' : 'CW',
                       'dl' : loaders,
                       'name_model' : name_model,
@@ -137,7 +127,7 @@ if __name__ == '__main__':
                             'steps' : 50,
                             'overshoot' : 0.02,
                             'device' : device,
-                            'path' : '/srv/newpenny/XAI/generated_data/toy_case/attacks/DeepFool',
+                            'path' : f'/srv/newpenny/XAI/generated_data/toy_case_{dataset}/attacks/DeepFool',
                             'name' : 'DeepFool',
                             'dl' : loaders,
                             'name_model' : name_model,
@@ -159,11 +149,13 @@ if __name__ == '__main__':
     #--------------------------------
     
     target_layers = [
+            # 'features.7',
+            # 'features.14',
+            'features.24', 
+            'features.26', 
+            'features.28', 
             'classifier.0',
             'classifier.3',
-            'features.7',
-            'features.14',
-            'features.28'
             ]
     model.set_target_layers(target_layers=target_layers, verbose=True)
 
@@ -181,14 +173,55 @@ if __name__ == '__main__':
     model.get_svds(path=svds_path, name=svds_name, verbose=verbose)
     for k in model._svds.keys():
         for kk in model._svds[k].keys():
-            print('svd shapes: ', k, kk, model._svds[k][kk].shape)    
+            print('svd shapes: ', k, kk, model._svds[k][kk].shape)  
+            
+    #--------------------------------
+    # Corevectors original
+    #--------------------------------
+    
+    # cvs_path = f'/srv/newpenny/XAI/generated_data/toy_case_{dataset}/corevectors/{dataset}/{name_model}'
+    # corevecs = CoreVectors(
+    #     path = cvs_path,
+    #     name = cvs_name,
+    #     model = model,
+    #     )
+    # with corevecs as cv: 
+    #     # copy dataset to coreVect dataset
+    #     cv.get_coreVec_dataset(
+    #         loaders = loaders, 
+    #         verbose = verbose
+    #         ) 
+    
+    #     cv.get_activations(
+    #             batch_size = bs,
+    #             loaders = loaders,
+    #             verbose = verbose
+    #             )
+    
+    #     cv.get_coreVectors(
+    #             batch_size = bs,
+    #             reduct_matrices = model._svds,
+    #             parser = parser_fn,
+    #             verbose = verbose
+    #             )
+    
+    #     # cv.normalize_corevectors(
+    #     #         wrt='train',
+    #     #         verbose=verbose,
+    #     #         to_file=Path(cvs_path)/(cvs_name+'.normalization.pt')
+    #     #         )
+    #     cv.normalize_corevectors(
+    #                     target_layers = target_layers,
+    #                     from_file=Path(f'/srv/newpenny/XAI/generated_data/corevectors/{dataset}/{name_model}/corevectors.normalization.pt'),
+    #                     verbose=True
+    #                     )
+
 
     #--------------------------------
-    # Attacks 
+    # Corevectors attacks 
     #--------------------------------
     for atk_type, atk_loader in atk_loaders.items():
-        cvs_path_norm = Path(f'/srv/newpenny/XAI/generated_data/corevectors/{dataset}/{name_model}')
-        cvs_path_atk = f'/srv/newpenny/XAI/generated_data/toy_case/corevectors={atk_type}/{dataset}/{name_model}'
+        cvs_path_atk = f'/srv/newpenny/XAI/generated_data/toy_case_{dataset}/corevectors_attacks={atk_type}/{dataset}/{name_model}'
 
         corevecs = CoreVectors(
             path = cvs_path_atk,
@@ -202,7 +235,7 @@ if __name__ == '__main__':
                     loaders = atk_loader, 
                     verbose = verbose,
                     parser = ftd,
-                    key_list = list(atk._atkds['train'].keys())
+                    key_list = list(atk._atkds['test'].keys())
                     ) 
     
             cv.get_activations(
@@ -220,6 +253,6 @@ if __name__ == '__main__':
 
             cv.normalize_corevectors(
                     target_layers = target_layers,
-                    from_file=cvs_path_norm/(cvs_name+'.normalization.pt'),
+                    from_file=Path(f'/srv/newpenny/XAI/generated_data/corevectors/{dataset}/{name_model}/corevectors.normalization.pt'),
                     verbose=True
                     )

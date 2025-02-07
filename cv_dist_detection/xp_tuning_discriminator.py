@@ -2,8 +2,6 @@ import sys
 sys.path.insert(0, '/home/leandro/repos/peepholelib')
 
 # python stuff
-import os
-sys.path.append('..')
 from pathlib import Path
 from paretoset import paretoset
 import functools

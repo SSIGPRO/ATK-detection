@@ -1,5 +1,5 @@
 import sys
-sys.path.insert(0, '/home/lorenzocapelli/repos/peepholelib')
+sys.path.insert(0, '/home/leandro/repos/peepholelib')
 
 # python stuff
 from tqdm import tqdm

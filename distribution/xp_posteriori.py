@@ -98,7 +98,7 @@ if __name__ == '__main__':
                 sub_sizes = torch.linspace(n_max/n_subs, n_max, n_subs, dtype=torch.int)
                 print('max, sss', n_max, sub_sizes)
             exit()
-            ''' 
+            '''
             tds = {}
             for key  in cv._corevds:
                 t = []

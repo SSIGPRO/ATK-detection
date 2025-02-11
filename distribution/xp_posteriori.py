@@ -36,7 +36,7 @@ if __name__ == '__main__':
     name_model = 'vgg16'
     verbose = True 
     plotose = False 
-    cv_size = 30
+    cv_size = 5
     
     plots_path = Path.cwd()/'../data/plots'
     plots_path.mkdir(parents = True, exist_ok = True)
@@ -134,6 +134,7 @@ if __name__ == '__main__':
                     plot_s = kdes[_l].sample(1000)
                     plot_p = kdes[_l].score_samples(plot_s)
                     print('plotss: ', plot_s, plot_p)
+
             # testing
             for _atk_name in attack_names:
                 with cv_atks[_atk_name] as cv_atk, out_atks[_atk_name] as out_atk:
@@ -151,11 +152,17 @@ if __name__ == '__main__':
                     
                     if verbose: print(f'computing AUC for {_atk_name} attacked test samples')
 
-                    # TODO: review this with Lorenzo
+                    # Get data from original and attacked samples 
                     idx = (cv_atk._corevds['test']['attack_success']==1) & (cv._corevds['test']['result']==1)
                     data_ori = cv._corevds['test'][idx]['coreVectors'][layer][:,:cv_size]
                     data_atk = cv_atk._corevds['test'][idx]['coreVectors'][layer][:,:cv_size]
                     test_data = torch.cat([data_ori, data_atk]) 
+
+                    # Get labels for original and attacked samples
+                    labels_ori = cv._corevds['test'][idx]['label']
+                    labels_atk = cv_atk._corevds['test'][idx]['pred']
+                    test_labels = torch.cat([labels_ori, labels_atk])
+                    print('test labels: ', test_labels)
 
                     probs = torch.zeros(test_data.shape[0], len(labels))
                     for i , _kde in enumerate(kdes.values()):
@@ -164,12 +171,7 @@ if __name__ == '__main__':
                     print(f'probs: ', probs) 
                     probs /= probs.sum(dim=1, keepdim=True)
                     print(f'sum: ', probs.sum(dim=1))
+                    print(probs[torch.linspace(0, len(test_labels)-1, len(test_labels)).int(), test_labels.int()])
                     # TODO: get output for idx samples and multiply by probs
 
-
-
-
-        
-        
-
-    
+                    

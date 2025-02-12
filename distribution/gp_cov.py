@@ -13,16 +13,21 @@ from gpytorch.models import ExactGP
 from gpytorch.likelihoods import MultitaskGaussianLikelihood
 from gpytorch.mlls import ExactMarginalLogLikelihood
 from gpytorch.means import ConstantMean, MultitaskMean
-from gpytorch.kernels import ScaleKernel, RBFKernel, MultitaskKernel
+from gpytorch.kernels import MultitaskKernel, MaternKernel, PeriodicKernel, RBFKernel, PolynomialKernel
 from gpytorch.distributions import MultitaskMultivariateNormal
 
 class GPModel(ExactGP):
-    def __init__(self, train_x, train_y, likelihood):
+    def __init__(self, train_x, train_y, likelihood, **kernel_kwargs):
         super(GPModel, self).__init__(train_x, train_y, likelihood)
         n_tasks = train_y.shape[1]
+        ard_num_dim = train_x.shape[1]
+
         self.mean_module = MultitaskMean(ConstantMean(), num_tasks = n_tasks)
         self.covar_module = MultitaskKernel(
-            RBFKernel(),
+            MaternKernel(nu = kernel_kwargs['nu'], ard_num_dims = ard_num_dim)+
+            PeriodicKernel(ard_num_dims = ard_num_dim),#+
+            #RBFKernel(ard_num_dims = ard_num_dim)+
+            #PolynomialKernel(power = kernel_kwargs['power'], ard_num_dims = ard_num_dim),
             num_tasks = n_tasks,
             rank = 1,
         )
@@ -40,17 +45,19 @@ def p(t):
 def foo(d, os):
     res = torch.zeros(d.shape[0], os)
     for i in range(os):
-        res[:,i] = torch.sin(d[:,0]*0.1*torch.pi*(i+1)) + torch.cos(d[:,1]*0.1*torch.pi*(i+1))
+        res[:,i] = torch.cos(d[:,0]*torch.pi)**(i+1) + torch.sin(d[:,1]*torch.pi)**(i+1)
     return res
 
 if __name__ == "__main__":
     device = 'cuda'
-    n = 100 
-    nv = 10
+    n =  15 
+    nv = 25 
     ds = 2
     os = 3
     bs = 5
-    max_iter = 50
+    lr = 0.3
+    max_iter = 200
+    kernel_kwargs = {'nu': 1.5}
 
     t = PTD(filename='./banana1', batch_size=[n], mode='w')
     t['x'] = MMT.zeros(shape=(n, ds))
@@ -69,7 +76,7 @@ if __name__ == "__main__":
         p(d)
 
     likelihood = MultitaskGaussianLikelihood(os)
-    model = GPModel(t['x'], t['l'], likelihood)   
+    model = GPModel(t['x'], t['l'], likelihood, **kernel_kwargs)   
     likelihood = likelihood.to(device)
     model = model.to(device)
 
@@ -79,7 +86,7 @@ if __name__ == "__main__":
     likelihood.train()
 
     # Use the adam optimizer
-    optimizer = torch.optim.Adam(model.parameters(), lr=0.5)  # Includes GaussianLikelihood parameters
+    optimizer = torch.optim.Adam(model.parameters(), lr=lr)  # Includes GaussianLikelihood parameters
     mll = ExactMarginalLogLikelihood(likelihood, model) 
 
     for i in range(max_iter):
@@ -87,45 +94,58 @@ if __name__ == "__main__":
         output = model(t['x'].to(device))
         loss = -mll(output, t['l'].to(device))
         loss.backward()
-        print('Iter %d/%d - Loss: %.3f'%(i + 1, max_iter, loss.item()))
+        if i%10==0: print('Iter %d/%d - Loss: %.3f'%(i + 1, max_iter, loss.item()))
         optimizer.step()
 
     # Set into eval mode
     model.eval()
     likelihood.eval()
-
-    plt.figure()
-    plt.plot(t['l'][:,0], t['l'][:,1], '.b', label='train')
-    plt.plot(v['l'][:,0], v['l'][:,1], '.r', label='test')
+    
+    lm = t['l'].min()
+    ld = t['l'].max()-t['l'].min()
+    def scale(x):
+        return (x-lm)/ld
+    
+    fig, axs = plt.subplots(1, os, subplot_kw={'projection': '3d'}, figsize=(os*4, 4))
+    for i in range(os):
+        axs[i].plot(t['x'][:,0], t['x'][:,1], scale(t['l'][:,i]), '.b', label='train')
+        axs[i].plot(v['x'][:,0], v['x'][:,1], scale(v['l'][:,i]), '.r', label='test')
 
     # Make predictions
     with torch.no_grad(), gpytorch.settings.fast_pred_var():
         predictions = likelihood(model(v['x'].to(device)))
         mean = predictions.mean
         lower, upper = predictions.confidence_region()
-        print('mean: ', mean)
-        print('lower: ', lower)
-        print('upper: ', upper)
-    plt.plot(mean[:,0].cpu(), mean[:,1].cpu(), '.g', label='pred')
+
+    for i in range(os):
+        axs[i].plot(v['x'][:,0], v['x'][:,1], scale(mean[:,i].cpu()), '.g', label='pred')
 
     # plot confidence
-    n_grid = 5 
-    low, high = t['x'].min()-1, t['x'].max()+1
+    n_grid = 25 
+    low, high = t['x'].min()-0.1, t['x'].max()+0.1
     grid = torch.linspace(low, high, n_grid)
     x_mat, y_mat = torch.meshgrid(grid, grid)
     t = torch.cat([x_mat.reshape(-1,1), y_mat.reshape(-1,1)], dim = 1)
-    print('plot cov: ', t, t.shape)
 
     # Make predictions
     with torch.no_grad(), gpytorch.settings.fast_pred_var():
         predictions = likelihood(model(t.to(device)))
         mean = predictions.mean
         lower, upper = predictions.confidence_region()
-        print('mean: ', mean, mean.shape)
-        print('upper: ', upper.shape, lower.shape)
-        conf = (upper-lower).norm(dim=1, keepdim=True).reshape(n_grid, n_grid)
-        print('conf: ', conf, conf.shape)
-    im = plt.contourf(mean[:,0].reshape(n_grid, n_grid).cpu(), mean[:,1].reshape(n_grid, n_grid).cpu(), conf.cpu())
-    plt.colorbar(im, alpha=0.5)
+        conf = (upper-lower)
+
+    conf = conf.cpu()
+    for i in range(os):
+        x = t[:,0]
+        y = t[:,1]
+        z = conf[:,i]
+        axs[i].plot_surface(
+                x.reshape(n_grid, n_grid),
+                y.reshape(n_grid, n_grid),
+                z.reshape(n_grid, n_grid),
+                cmap = plt.cm.coolwarm,
+                alpha = 0.5
+                )
     plt.legend()
+    fig.tight_layout()
     plt.show()

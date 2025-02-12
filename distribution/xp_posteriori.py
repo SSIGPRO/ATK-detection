@@ -4,6 +4,8 @@ sys.path.insert(0, '/home/leandro/repos/peepholelib')
 # python stuff
 from pathlib import Path
 from contextlib import ExitStack
+import numpy as np
+import pandas
 
 # Our stuff
 from peepholelib.coreVectors.coreVectors import CoreVectors 
@@ -30,16 +32,10 @@ if __name__ == '__main__':
     #--------------------------------
     # Directories definitions
     #--------------------------------
-    ds_path = '/srv/newpenny/dataset/CIFAR100'
-    
     dataset = 'CIFAR100' 
     name_model = 'vgg16'
     verbose = True 
-    plotose = False 
-    cv_size = 5
-    
-    plots_path = Path.cwd()/'../data/plots'
-    plots_path.mkdir(parents = True, exist_ok = True)
+    cv_size = 100 
 
     cvs_name = 'corevectors'
     out_name = 'output'
@@ -49,7 +45,7 @@ if __name__ == '__main__':
     cv_datasets_path = Path.cwd()/f'../data/cv_datasets'
     cv_datasets_path.mkdir(parents=True, exist_ok=True)
 
-    attack_names = ['BIM']#, 'CW', 'PGD', 'DeepFool']
+    attack_names = ['BIM', 'CW', 'PGD', 'DeepFool']
     labels = torch.linspace(0, 100-1, 100, dtype=torch.int).numpy().tolist()
 
     kde_params = {
@@ -61,10 +57,10 @@ if __name__ == '__main__':
     # Layers selection 
     #--------------------------------
     target_layers = [
-            #'classifier.0',
+            'classifier.0',
             'classifier.3',
-            #'features.14',
-            #'features.28'
+            'features.14',
+            'features.28'
             ]   
     
     #--------------------------------
@@ -118,23 +114,18 @@ if __name__ == '__main__':
         # iterate for each layer
         for layer in target_layers:
 
-            # compute labes distribution 
+            # compute labes distribution
             _ds = cv._corevds['train']
             
             # filtering cvs per label
             if verbose: print(f'------\n fitting detector for layer {layer}\n------')
-            kdes = {}
+            avg, std = {}, {}
             for _l in labels:
-                kdes[_l] = KernelDensity(**kde_params)
                 __ds = _ds[_ds['label'] == _l]
                 train_data = __ds['coreVectors'][layer][:, :cv_size].detach()
-                _ = kdes[_l].fit(train_data)
+                avg[_l] =  train_data.mean(dim=0)
+                std[_l] =  train_data.var(dim=0)
                
-                if plotose:
-                    plot_s = kdes[_l].sample(1000)
-                    plot_p = kdes[_l].score_samples(plot_s)
-                    print('plotss: ', plot_s, plot_p)
-
             # testing
             for _atk_name in attack_names:
                 with cv_atks[_atk_name] as cv_atk, out_atks[_atk_name] as out_atk:
@@ -165,13 +156,27 @@ if __name__ == '__main__':
                     print('test labels: ', test_labels)
 
                     probs = torch.zeros(test_data.shape[0], len(labels))
-                    for i , _kde in enumerate(kdes.values()):
-                        logprob = _kde.score_samples(test_data) 
-                        probs[:, i] = torch.Tensor(logprob).exp()
+                    for i, _avg in enumerate(avg.values()):
+                        probs[:, i] = (test_data-_avg).norm(dim=1)
+
                     print(f'probs: ', probs) 
-                    probs /= probs.sum(dim=1, keepdim=True)
-                    print(f'sum: ', probs.sum(dim=1))
-                    print(probs[torch.linspace(0, len(test_labels)-1, len(test_labels)).int(), test_labels.int()])
+                    #probs /= probs.sum(dim=1, keepdim=True)
+                    #print(f'sum: ', probs.sum(dim=1))
+                    on_labels = probs[torch.linspace(0, len(test_labels)-1, len(test_labels)).int(), test_labels.int()]
+                    minimum, _ = probs.min(dim=1)
+                    print(on_labels, minimum)
+                    nz = (on_labels==minimum).count_nonzero()
+                    auc = nz/len(test_labels)
+                    print(f"{nz}/{len(test_labels)} = {auc}")
                     # TODO: get output for idx samples and multiply by probs
 
-                    
+                    _res_layer.append(layer)
+                    _res_auc.append(auc)
+                    _res_atk.append(_atk_name)
+    _res_layer, _res_auc, _res_atk = np.array(_res_layer), np.array(_res_auc), np.array(_res_atk) 
+    df = pandas.DataFrame({
+        'layer': _res_layer,
+        'auc': _res_auc,
+        'atk': _res_atk,
+        })
+    df.to_pickle((Path.cwd()/'aa.pk').as_posix())

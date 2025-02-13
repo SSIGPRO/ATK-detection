@@ -1,5 +1,6 @@
 # python stuff
 from matplotlib import pyplot as plt
+from pathlib import Path
 
 # torch stuff
 import torch
@@ -9,33 +10,9 @@ from torch.utils.data import DataLoader, WeightedRandomSampler
 
 # GP stuff
 import gpytorch
-from gpytorch.models import ExactGP
-from gpytorch.likelihoods import MultitaskGaussianLikelihood
-from gpytorch.mlls import ExactMarginalLogLikelihood
-from gpytorch.means import ConstantMean, MultitaskMean
-from gpytorch.kernels import MultitaskKernel, MaternKernel, PeriodicKernel, RBFKernel, PolynomialKernel
-from gpytorch.distributions import MultitaskMultivariateNormal
 
-class GPModel(ExactGP):
-    def __init__(self, train_x, train_y, likelihood, **kernel_kwargs):
-        super(GPModel, self).__init__(train_x, train_y, likelihood)
-        n_tasks = train_y.shape[1]
-        ard_num_dim = train_x.shape[1]
-
-        self.mean_module = MultitaskMean(ConstantMean(), num_tasks = n_tasks)
-        self.covar_module = MultitaskKernel(
-            MaternKernel(nu = kernel_kwargs['nu'], ard_num_dims = ard_num_dim)+
-            PeriodicKernel(ard_num_dims = ard_num_dim),#+
-            #RBFKernel(ard_num_dims = ard_num_dim)+
-            #PolynomialKernel(power = kernel_kwargs['power'], ard_num_dims = ard_num_dim),
-            num_tasks = n_tasks,
-            rank = 1,
-        )
-
-    def forward(self, x):
-        mean_x = self.mean_module(x)
-        covar_x = self.covar_module(x)
-        return MultitaskMultivariateNormal(mean_x, covar_x)
+# out stuff
+from estimators.gp import GPModel
 
 def p(t):
     for k, v in t.items():
@@ -57,7 +34,7 @@ if __name__ == "__main__":
     bs = 5
     lr = 0.3
     max_iter = 200
-    kernel_kwargs = {'nu': 1.5}
+    kernel_kwargs = {'nu': 1.5, 'power':2}
 
     t = PTD(filename='./banana1', batch_size=[n], mode='w')
     t['x'] = MMT.zeros(shape=(n, ds))
@@ -75,36 +52,19 @@ if __name__ == "__main__":
     for d in dl:
         p(d)
 
-    likelihood = MultitaskGaussianLikelihood(os)
-    model = GPModel(t['x'], t['l'], likelihood, **kernel_kwargs)   
-    likelihood = likelihood.to(device)
-    model = model.to(device)
+    model = GPModel(x=t['x'], y=t['l'], lr=lr, kernel_kwargs=kernel_kwargs, device=device)   
 
     print('-- training')
-    # Find optimal model hyperparameters
-    model.train()
-    likelihood.train()
-
-    # Use the adam optimizer
-    optimizer = torch.optim.Adam(model.parameters(), lr=lr)  # Includes GaussianLikelihood parameters
-    mll = ExactMarginalLogLikelihood(likelihood, model) 
 
     for i in range(max_iter):
-        optimizer.zero_grad()
-        output = model(t['x'].to(device))
-        loss = -mll(output, t['l'].to(device))
-        loss.backward()
+        loss = model.train_iteration() 
         if i%10==0: print('Iter %d/%d - Loss: %.3f'%(i + 1, max_iter, loss.item()))
-        optimizer.step()
-
+        
     # Set into eval mode
     model.eval()
-    likelihood.eval()
     
-    lm = t['l'].min()
-    ld = t['l'].max()-t['l'].min()
     def scale(x):
-        return (x-lm)/ld
+        return (x-t['l'].min())/(t['l'].max()-t['l'].min())
     
     fig, axs = plt.subplots(1, os, subplot_kw={'projection': '3d'}, figsize=(os*4, 4))
     for i in range(os):
@@ -113,7 +73,7 @@ if __name__ == "__main__":
 
     # Make predictions
     with torch.no_grad(), gpytorch.settings.fast_pred_var():
-        predictions = likelihood(model(v['x'].to(device)))
+        predictions = model.get_likelihood(v['x'].to(device))
         mean = predictions.mean
         lower, upper = predictions.confidence_region()
 
@@ -129,7 +89,7 @@ if __name__ == "__main__":
 
     # Make predictions
     with torch.no_grad(), gpytorch.settings.fast_pred_var():
-        predictions = likelihood(model(t.to(device)))
+        predictions = model.get_likelihood(t.to(device))
         mean = predictions.mean
         lower, upper = predictions.confidence_region()
         conf = (upper-lower)
@@ -148,4 +108,6 @@ if __name__ == "__main__":
                 )
     plt.legend()
     fig.tight_layout()
+    plt.savefig(Path.cwd()/'gp_test.png', dpi=300)
     plt.show()
+

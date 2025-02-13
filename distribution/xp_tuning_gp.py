@@ -30,7 +30,8 @@ from ray.train.torch import get_device as ray_get_device
 import ray.cloudpickle as pickle
 
 # Our stuff
-from peepholelib.utils.samplers import dist_preserving as dpss 
+from peepholelib.coreVectors.coreVectors import CoreVectors 
+from peepholelib.utils.samplers import dist_preserving 
 from estimators.gp import GPModel, parser_fn 
 
 def gp_wrap(config, **kwargs):
@@ -55,7 +56,8 @@ def gp_wrap(config, **kwargs):
                 verbose = verbose 
                 )
 
-        ds, _ = dpss(cv._corevds['train'], ss, weights='label')
+        print(dist_preserving)
+        ds, _ = dist_preserving(cv._corevds['train'], ss, weights='label')
         print('_key: ', len(ds), ' samples')
 
         cv_dl = DataLoader(
@@ -117,13 +119,15 @@ def gp_wrap(config, **kwargs):
             with tempfile.TemporaryDirectory() as tempdir: 
                 checkpoint = Checkpoint.from_directory(tempdir)
                 torch.save(model.state_dict(), tempdir+'/model.pt')
+
+                model.eval()
                 auc = {}
                 for k, dl in testloaders.items():
                     auc[k] = discriminator.AUC_test(dl)
-
+                model.train(True)
+                
                 train.report({
-                    'loss_train': loss_train,
-                    'loss_val': loss_val,
+                    'loss': loss,
                     'n_params': discriminator.num_parameters,
                     **auc
                     },
@@ -143,8 +147,9 @@ if __name__ == '__main__':
     cvs_name = 'corevectors'
     cvs_path = f'/srv/newpenny/XAI/generated_data/corevectors/{dataset}/{name_model}'
 
-    results_home = Path('/srv/newpenny/atk-detection/results/gp')
-    results_path = results_home/'tuning_results')
+    #results_home = Path('/srv/newpenny/atk-detection/results/gp')
+    results_home = Path.cwd()/'../data/results/gp'
+    results_path = results_home/'tuning_results'
     results_path.mkdir(exist_ok=True, parents=True)
 
     tune_path_home = results_home/'tuning'
@@ -158,8 +163,9 @@ if __name__ == '__main__':
     resources = {'cpu': 16, 'gpu':1}
     max_cv_size = 300 
     max_epochs = 1001
-    num_samples = 50 
+    num_samples = 1
     checkpoint_every = 50
+    max_concurrent = 1
     
     #--------------------------------
     # CoreVectors 
@@ -175,12 +181,12 @@ if __name__ == '__main__':
     #--------------------------------
     config = {
             'cv_size': tune.randint(5, max_cv_size+1),
-            'lr': tune.uniform(1e-2, 1)
+            'lr': tune.uniform(1e-2, 1),
             'kernel_kwargs': {
-                'nu': tune.loguniform(1e-6, 1e-4)
-                'power': tune.randint(1, 5+1)
+                'nu': tune.loguniform(1e-6, 1e-4),
+                'power': tune.randint(1, 5+1),
                 },
-            'perc': tune.uniform(0.01, 0.2)
+            'perc': tune.uniform(0.01, 0.2),
             }
     
     #--------------------------------
@@ -211,7 +217,7 @@ if __name__ == '__main__':
             quit() 
 
         searcher = OptunaSearch(metric=['loss'], mode = ['min'])
-        algo = ConcurrencyLimiter(searcher, max_concurrent=4)
+        algo = ConcurrencyLimiter(searcher, max_concurrent=max_concurrent)
         scheduler = AsyncHyperBandScheduler(grace_period=5, max_t=100, metric='loss', mode="min") 
         
         trainable = tune.with_resources(

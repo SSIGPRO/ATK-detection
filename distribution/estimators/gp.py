@@ -71,6 +71,22 @@ class GPModel(torch.nn.Module):
 
     def get_likelihood(self, x):
         return self.lh(self.gp(x))
+   
+    def AUC_test(self, dl):
+        n_samples = dl.dataset['labels'].shape[0]
+
+        with torch.no_grad():
+            inputs, targets = dl.collate_fn(dl.dataset) 
+            inputs, targets = inputs.to(self.device), targets.to(self.device)
+            
+            predictions = self.get_likelihood(inputs)
+            mean = predictions.mean
+            lower, upper = predictions.confidence_region()
+            conf = upper - lower
+        scores = conf.mean(dim=1).detach().cpu().numpy()
+        labels = targets.detach().cpu().numpy()
+                
+        return roc_auc_score(labels, scores)
 
 class GPWrap(ExactGP):
     def __init__(self, **kwargs):

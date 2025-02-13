@@ -10,6 +10,14 @@ from gpytorch.means import ConstantMean, MultitaskMean
 from gpytorch.kernels import MultitaskKernel, MaternKernel, PeriodicKernel, RBFKernel, PolynomialKernel
 from gpytorch.distributions import MultitaskMultivariateNormal
 
+def parser_fn(x, cv_size):
+    _d = x['data'][:,:,:cv_size]
+    _l = x['labels']
+    dd = _d.contiguous().view(_d.shape[0], _d.shape[1]*_d.shape[2])
+    ll = _l.view(_l.shape[0], 1)
+    return dd, ll
+
+
 class GPModel(torch.nn.Module):
     def __init__(self, **kwargs):
         super(GPModel, self).__init__()
@@ -60,10 +68,6 @@ class GPModel(torch.nn.Module):
         loss.backward()
         self.optimizer.step()
         return loss
-
-    def eval(self):
-        self.gp.eval()
-        self.lh.eval()
 
     def get_likelihood(self, x):
         return self.lh(self.gp(x))

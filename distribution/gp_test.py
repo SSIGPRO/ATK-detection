@@ -35,6 +35,7 @@ if __name__ == "__main__":
     lr = 0.3
     max_iter = 200
     kernel_kwargs = {'nu': 1.5, 'power':2}
+    model_file = Path.cwd()/'gp_model_test.pt' 
 
     t = PTD(filename='./banana1', batch_size=[n], mode='w')
     t['x'] = MMT.zeros(shape=(n, ds))
@@ -53,13 +54,21 @@ if __name__ == "__main__":
         p(d)
 
     model = GPModel(x=t['x'], y=t['l'], lr=lr, kernel_kwargs=kernel_kwargs, device=device)   
+    
+    if not model_file.exists():
+        print('-- training')
+        for i in range(max_iter):
+            loss = model.train_iteration() 
+            if i%10==0: print('Iter %d/%d - Loss: %.3f'%(i + 1, max_iter, loss.item()))
+            
+        # save model
+        print('saving: ', model.state_dict())
+        torch.save(model.state_dict(), model_file)
+    else:
+        sd = torch.load(model_file)
+        print('loading: ', sd)
+        model.load_state_dict(sd)
 
-    print('-- training')
-
-    for i in range(max_iter):
-        loss = model.train_iteration() 
-        if i%10==0: print('Iter %d/%d - Loss: %.3f'%(i + 1, max_iter, loss.item()))
-        
     # Set into eval mode
     model.eval()
     

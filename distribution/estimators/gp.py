@@ -10,8 +10,9 @@ from gpytorch.means import ConstantMean, MultitaskMean
 from gpytorch.kernels import MultitaskKernel, MaternKernel, PeriodicKernel, RBFKernel, PolynomialKernel
 from gpytorch.distributions import MultitaskMultivariateNormal
 
-class GPModel:
+class GPModel(torch.nn.Module):
     def __init__(self, **kwargs):
+        super(GPModel, self).__init__()
         self.x = kwargs['x']
         self.y = kwargs['y']
         self.kernel_kwargs = kwargs['kernel_kwargs']
@@ -49,7 +50,7 @@ class GPModel:
 
         return
         
-    def __call__(self, x):
+    def forward(self, x):
         return self.gp(x)
 
     def train_iteration(self):

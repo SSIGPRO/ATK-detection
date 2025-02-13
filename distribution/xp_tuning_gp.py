@@ -14,8 +14,7 @@ from paretoset import paretoset
 import torch
 
 # detectors stuff
-from detectors.ml_based import OCSVM, LOF, IF  
-from detectors.gaussian_distribution_based import MD 
+from estimators.gp import GPModel  
 
 # Corevectors 
 from peepholelib.coreVectors.coreVectors import CoreVectors 
@@ -30,15 +29,6 @@ from ray.tune.search import ConcurrencyLimiter
 from ray.tune.schedulers import AsyncHyperBandScheduler
 from ray.tune.search.optuna import OptunaSearch
 import ray.cloudpickle as pickle
-
-os.environ["CUDA_VISIBLE_DEVICES"] = "0,1"
-os.environ['SCIPY_USE_PROPACK'] = "True"
-threads = "64"
-os.environ["OMP_NUM_THREADS"] = threads
-os.environ["OPENBLAS_NUM_THREADS"] = threads
-os.environ["MKL_NUM_THREADS"] = threads
-os.environ["VECLIB_MAXIMUM_THREADS"] = threads
-os.environ["NUMEXPR_NUM_THREADS"] = threads
 
 def detector_wrap(config, **kwargs):
     verbose = kwargs['verbose'] if 'verbose' in kwargs else False

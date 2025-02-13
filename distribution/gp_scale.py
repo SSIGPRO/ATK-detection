@@ -1,6 +1,8 @@
 # python stuff
-from matplotlib import pyplot as plt
+plot = False
+if plot: from matplotlib import pyplot as plt
 from pathlib import Path
+from math import log
 
 # torch stuff
 import torch
@@ -28,15 +30,15 @@ def foo(d, os):
     return res
 
 if __name__ == "__main__":
-    device = 'cuda'
-    alpha = 9  
+    device = 'cuda:2'
+    alpha = 2 
     nv = 25 # number validation samples 
-    ds = 20 # input data dimension
-    n = round(alpha*ds) # number of training data
-    os = 5
-    lr = 0.2
+    ds = 50 # input data dimension
+    n = round(alpha*(ds**2)) # number of training data
+    os = 1
+    lr = 0.3
     max_iter = 500 
-    kernel_kwargs = {'nu': 1.5, 'power':2}
+    kernel_kwargs = {'nu': 2.5, 'power':2}
     model_file = Path.cwd()/'gp_model_test.pt' 
 
     t = PTD(filename='./banana1', batch_size=[n], mode='w')
@@ -76,10 +78,12 @@ if __name__ == "__main__":
         conf = conf.cpu()
         
         c[i,:] = conf.mean(dim=0, keepdim=True)
-
+    print('confs: ', c)
+    
+    if not plot:
+        quit()
     fig = plt.figure()
     labels = ['feature %d'%_os for _os in range(os)]
-    print('confs: ', c)
     plt.plot(deltas, c, '.', label=labels)
     plt.xlabel(r'$\sigma$')
     plt.legend()

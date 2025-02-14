@@ -2,6 +2,7 @@
 from matplotlib import pyplot as plt
 from pathlib import Path
 import matplotlib.colors as mcolors
+import matplotlib.patches as mpatches
 
 # torch stuff
 import torch
@@ -23,20 +24,23 @@ def p(t):
 def foo(d, nc):
     res = torch.zeros(d.shape[0])
     for i in range(d.shape[1]):
-        res += torch.cos(d[:,i]*torch.pi)
+        res += ((-1)**i)*torch.cos(d[:,i]*2*torch.pi)
     res = res.round().int()
     res -= res.min() # labels must be from positive int
     return res.clamp(0, nc-1) 
 
 if __name__ == "__main__":
+    plot = False
+    recalc = True
     device = 'cuda'
-    n =  30 
-    nc = 4 
-    nv = 25 
-    ds = 2
-    bs = 5
-    lr = 0.9
-    max_iter = 200
+    n =  300 # num train samples
+    nc = 4 # num classes 
+    nv = 50 # num val samples 
+    ds = 300 # n features 
+
+    # learning hyperp
+    lr = 0.05
+    max_iter = 500
     kernel_kwargs = {'nu': 1.5, 'power':2}
     lh_kwargs = {'alpha_epsilon': 0.01}
 
@@ -64,7 +68,7 @@ if __name__ == "__main__":
             device=device
             )   
     
-    if not model_file.exists():
+    if not model_file.exists() or recalc:
         print('-- training')
         for i in range(max_iter):
             loss = model.train_iteration() 
@@ -81,27 +85,44 @@ if __name__ == "__main__":
     # Set into eval mode
     model.eval()
 
-    pallet = list(mcolors.XKCD_COLORS)
-    cs = []
-    for i in range(nc):
-        cs.append(pallet[i])
-
-    fig, axs = plt.subplots(1, nc+1, subplot_kw={'projection': '3d'}, figsize=((nc+1)*4, 4))
-
-    axs[0].scatter(t['x'][:,0], t['x'][:,1], marker='.', c=[cs[x] for x in t['l']], label='train')
-    axs[0].scatter(v['x'][:,0], v['x'][:,1], marker='s', c=[cs[x] for x in v['l']], label='test')
+    if plot:
+        pallet = list(mcolors.XKCD_COLORS)
+        cs = []
+        for i in range(nc):
+            cs.append(pallet[i*10+5])
+        labels = ['train', 'test', 'data']
+        markers = ['o', 's', 'v']
+        fig, axs = plt.subplots(1, nc, subplot_kw={'projection': '3d'}, figsize=(nc*4, 4))
+        
+        for i in range(nc):
+            axs[i].scatter(t['x'][:,0], t['x'][:,1], marker=markers[0], c=[cs[x] for x in t['l']], alpha=0.5)
+            axs[i].scatter(v['x'][:,0], v['x'][:,1], marker=markers[1], c=[cs[x] for x in v['l']], alpha=0.5)
 
     # Make predictions
     with torch.no_grad(), gpytorch.settings.fast_pred_var():
-        predictions = model.get_likelihood(v['x'].to(device))
-        mean = predictions.mean
-        print('mean: ', mean)
-        print('mean loc: ', predictions.loc)
-        lower, upper = predictions.confidence_region()
+        _x = v['x'].to(device)
+        _y = v['l'].to(device)
+        _lh = model.get_likelihood(_x)
+        #mean = _lh.mean
+        lower, upper = _lh.confidence_region()
+        conf = upper - lower
 
-    axs[0].scatter(v['x'][:,0], v['x'][:,1], marker='v', c=[cs[x] for x in mean], label='pred')
-    axs[0].legend()
+        # normalization
+        norm_samples = _lh.sample(torch.Size((256,))).exp()
+        prob = (norm_samples/norm_samples.sum(-2, keepdim=True)).mean(0)
+        
+        pred = prob.max(dim=0)[1] # [1] to get indixes (classes) 
+        pred_conf = conf.gather(dim=0, index=pred.view(1,-1))
+        loss = -model.mll(model(_x), _y).mean()
+    print('loss: ', loss)
+    print('pred conf: ', pred_conf)
 
+    if not plot:
+        quit()
+
+    for i in range(nc):
+        axs[i].scatter(v['x'][:,0], v['x'][:,1], marker=markers[2], c=[cs[x] for x in pred], alpha=0.5)
+    
     # plot confidence
     n_grid = 25 
     low, high = t['x'].min()-0.1, t['x'].max()+0.1
@@ -111,22 +132,37 @@ if __name__ == "__main__":
 
     # Make predictions
     with torch.no_grad(), gpytorch.settings.fast_pred_var():
-        predictions = model.get_likelihood(t.to(device))
-        mean = predictions.mean
-        lower, upper = predictions.confidence_region()
+        _lh = model.get_likelihood(t.to(device))
+        mean = _lh.mean
+        lower, upper = _lh.confidence_region()
         conf = (upper-lower)
+        
+        # normalization
+        norm_samples = _lh.sample(torch.Size((256,))).exp()
+        prob = (norm_samples/norm_samples.sum(-2, keepdim=True)).mean(0)
+        
+        pred = prob.max(dim=0)[1] # [1] to get indixes (classes) 
+   
 
     conf = conf.cpu()
     for i in range(nc):
         x = t[:,0].reshape(n_grid, n_grid)
         y = t[:,1].reshape(n_grid, n_grid)
         z = conf[i].reshape(n_grid, n_grid)
-        axs[i+1].plot_surface(
+        axs[i].plot_surface(
                 x, y, z,
                 cmap = plt.cm.coolwarm,
                 alpha = 0.5
                 )
-        axs[i+1].set_title(f'class {i}')
+        axs[i].set_title(f'class {i}')
+    
+    handles = [plt.plot([],[], color='g', marker=m, label=l)[0] for l, m in zip(labels, markers)]
+    leg = axs[0].legend(handles=handles, loc=(0.8, 1.01), title='data')
+
+    handles = [mpatches.Patch(color=c, label=f'{i}') for i, c in enumerate(cs)]
+    axs[0].add_artist(leg)
+    axs[0].legend(handles=handles, loc=(0.0, 1.01), title='classes')
+
     fig.tight_layout()
     plt.savefig(Path.cwd()/'gp_test.png', dpi=300)
     plt.show()

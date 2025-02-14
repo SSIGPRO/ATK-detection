@@ -35,7 +35,6 @@ class GPModel(torch.nn.Module):
         self.x = self.x.to(self.device)
         self.y = self.y.to(self.device)
 
-        print(self.y)
         # define likelihood (lh)
         self.lh = DirichletClassificationLikelihood(self.y, **self.lh_kwargs, learn_additional_noise = True)
         self.lh = self.lh.to(self.device)

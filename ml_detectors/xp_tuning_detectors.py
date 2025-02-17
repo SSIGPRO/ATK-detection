@@ -19,7 +19,6 @@ from detectors.gaussian_distribution_based import MD
 
 # Corevectors 
 from peepholelib.coreVectors.coreVectors import CoreVectors 
-
 # Tuner
 import tempfile
 from functools import partial
@@ -88,7 +87,7 @@ def detector_wrap(config, **kwargs):
                         verbose = verbose 
                         )
                  
-                if verbose: print(f'computing {metric_type} for {_atk_name} attacked test samples')
+                if verbose: print(f'computing {mtest_etric_type} for {_atk_name} attacked test samples')
                 data_ori = cv._corevds['test']['coreVectors'][layer][:,:cv_size]
                 data_atk = cv_atk._corevds['test']['coreVectors'][layer][:,:cv_size]
 

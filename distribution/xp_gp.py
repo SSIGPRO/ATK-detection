@@ -20,19 +20,34 @@ from tensordict import PersistentTensorDict as PTD
 # Our stuff
 from peepholelib.coreVectors.coreVectors import CoreVectors 
 from peepholelib.utils.samplers import dist_preserving 
-from estimators.gp import GPModel, parser_fn 
 
-def gp_wrap(config, **kwargs):
-    cv_size = config.pop('cv_size')
+def cv_parser_fn(x, cv_size, target_layers):
+    _d = x['data'][:,:,:cv_size]
+    _l = x['labels']
+    dd = _d.contiguous().view(_d.shape[0], _d.shape[1]*_d.shape[2])
+    ll = _l.view(_l.shape[0], 1)
+    return dd, ll
+
+def test_parser_fn(x, cv_size):
+    _d = x['data'][:,:,:cv_size]
+    _l = x['labels']
+    dd = _d.contiguous().view(_d.shape[0], _d.shape[1]*_d.shape[2])
+    ll = _l.view(_l.shape[0], 1)
+    return dd, ll
+
+def gp_wrap(**kwargs):
+    cv_size = kwargs.pop('cv_size')
     verbose = kwargs['verbose'] if 'verbose' in kwargs else False
     cv = kwargs['cv'] 
     testsets = kwargs['testsets']
     max_epochs = kwargs['max_epochs']
+    perc = kwargs['perc']
+    target_layers = kwargs['target_layers']
 
     #--------------------------------
     # dataloaders 
     #--------------------------------
-    collate_fn = functools.partial(parser_fn, cv_size=cv_size)
+    collate_fn = functools.partial(cv_parser_fn, cv_size=cv_size, target_layers=target_layers)
 
     with cv:
         cv.load_only(
@@ -40,21 +55,24 @@ def gp_wrap(config, **kwargs):
                 verbose = verbose 
                 )
 
-        print(dist_preserving)
+        ss = round(cv._corevds['train'].shape[0]*perc)
         ds, _ = dist_preserving(cv._corevds['train'], ss, weights='label')
-        print('_key: ', len(ds), ' samples')
 
         cv_dl = DataLoader(
             ds,
-            batch_size = bs,
+            batch_size = ss,
             shuffle = True,
             collate_fn = collate_fn,
             num_workers = 4,
             pin_memory = True,
             )
+        print('fetching')
         x, y = next(iter(cv_dl))
+        print('detaching')
         x, y = x.detach(), y.detach()
-
+        print('sizes: ', ss, x.shape, y.shape)
+        
+    collate_fn = functools.partial(test_parser_fn, cv_size=cv_size)
     testloaders = {}
     for _k, _d in testsets.items():
         testloaders[_k] = DataLoader(
@@ -73,7 +91,6 @@ def gp_wrap(config, **kwargs):
     model = GPModel(
             x = x, 
             y = y,
-            **config,
             device = device,
             )
 
@@ -104,7 +121,7 @@ if __name__ == '__main__':
     results_path.mkdir(exist_ok=True, parents=True)
 
     datasets_path = Path(f'/srv/newpenny/XAI/generated_data/cv_datasets')
-    
+    target_layers = ['features.14', 'features.28', 'classifier.0', 'classifier.0'] 
     atk_list = ['PGD', 'BIM', 'CW', 'DeepFool']
 
     # Tuning defs
@@ -128,13 +145,14 @@ if __name__ == '__main__':
     # Tune configurations 
     #--------------------------------
     config = {
-            'cv_size': tune.randint(5, max_cv_size+1),
-            'lr': tune.uniform(1e-2, 1),
+            'cv_size': 5,
+            'lr': 0.05,
             'kernel_kwargs': {
-                'nu': tune.loguniform(1e-6, 1e-4),
-                'power': tune.randint(1, 5+1),
+                'nu': 1.5,
+                'power': 2,
                 },
-            'perc': tune.uniform(0.01, 0.2),
+            'perc': 0.005,
+            'lh_kwargs': {'alpha_epsilon': 0.01}
             }
     
     #--------------------------------
@@ -158,6 +176,8 @@ if __name__ == '__main__':
         
         t0 = time()
         loss = gp_wrap(
+                **config,
+                target_layers,
                 cv = cv,
                 testsets = testsets,
                 max_epochs = max_epochs,

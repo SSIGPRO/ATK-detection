@@ -16,9 +16,12 @@ from cuda_selector import auto_cuda
 # tensordict stuff
 from tensordict import PersistentTensorDict as PTD
 
-# Our stuff
+# Peepholelib stuff
 from peepholelib.coreVectors.coreVectors import CoreVectors 
 from peepholelib.utils.samplers import dist_preserving 
+
+# Our stuff
+from estimators.gp import GPModel
 
 def cv_parser_fn(x, cv_size, target_layers):
     layer_data = []
@@ -27,14 +30,14 @@ def cv_parser_fn(x, cv_size, target_layers):
     _d = torch.stack(layer_data, dim=1) 
     _l = x['label']
     dd = _d.contiguous().view(_d.shape[0], _d.shape[1]*_d.shape[2])
-    ll = _l.view(_l.shape[0], 1)
+    ll = _l
     return dd, ll
 
 def test_parser_fn(x, cv_size):
     _d = x['data'][:,:,:cv_size]
     _l = x['labels']
     dd = _d.contiguous().view(_d.shape[0], _d.shape[1]*_d.shape[2])
-    ll = _l.view(_l.shape[0], 1)
+    ll = _l
     return dd, ll
 
 def gp_wrap(**kwargs):
@@ -45,7 +48,8 @@ def gp_wrap(**kwargs):
     max_epochs = kwargs['max_epochs']
     perc = kwargs['perc']
     target_layers = kwargs['target_layers']
-
+    device = 'cuda:0' 
+    print('kwargs', kwargs)
     #--------------------------------
     # dataloaders 
     #--------------------------------
@@ -69,8 +73,31 @@ def gp_wrap(**kwargs):
             pin_memory = True,
             )
         x, y = next(iter(cv_dl))
-        x, y = x.detach(), y.detach()
+        x, y = x.detach(), y.detach().int()
+    print(x, y)
+    input('wait')
+    #--------------------------------
+    # Create Discriminator 
+    #--------------------------------
+    if verbose: print('Creating Discriminator')
+    model = GPModel(
+            x = x, 
+            y = y,
+            **kwargs,
+            device = device,
+            )
+    input('wait')
+    #--------------------------------
+    # Computation 
+    #--------------------------------
+    for epoch in range(max_epochs): 
+        loss = model.train_iteration()
+        if verbose: print("epoch: ", epoch, ' - loss: ', loss)
+        return loss
 
+    #--------------------------------
+    # Testing 
+    #--------------------------------
     collate_fn = functools.partial(test_parser_fn, cv_size=cv_size)
     testloaders = {}
     for _k, _d in testsets.items():
@@ -82,25 +109,7 @@ def gp_wrap(**kwargs):
             num_workers = 4,
             pin_memory = True,
             )
-                                     
-    #--------------------------------
-    # Create Discriminator 
-    #--------------------------------
-    if verbose: print('Creating Discriminator')
-    model = GPModel(
-            x = x, 
-            y = y,
-            device = device,
-            )
 
-    #--------------------------------
-    # Computation 
-    #--------------------------------
-    n_params = model.num_parameters
-    for epoch in range(max_epochs): 
-        loss = discriminator.train_iteration()
-        if verbose: print("epoch: ", epoch, ' - loss: ', loss)
-                
     return loss
 
 if __name__ == '__main__':
@@ -130,7 +139,8 @@ if __name__ == '__main__':
     num_samples = 1
     checkpoint_every = 50
     max_concurrent = 1
-    
+    n_classes = 100
+
     #--------------------------------
     # CoreVectors 
     #--------------------------------
@@ -176,6 +186,7 @@ if __name__ == '__main__':
         t0 = time()
         loss = gp_wrap(
                 **config,
+                n_classes = n_classes,
                 target_layers = target_layers,
                 cv = cv,
                 testsets = testsets,

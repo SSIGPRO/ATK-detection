@@ -5,7 +5,6 @@ sys.path.insert(0, '/home/leandro/repos/peepholelib')
 import os
 sys.path.append('..')
 from pathlib import Path
-from paretoset import paretoset
 import functools
 from time import time
 
@@ -22,8 +21,11 @@ from peepholelib.coreVectors.coreVectors import CoreVectors
 from peepholelib.utils.samplers import dist_preserving 
 
 def cv_parser_fn(x, cv_size, target_layers):
-    _d = x['data'][:,:,:cv_size]
-    _l = x['labels']
+    layer_data = []
+    for l in target_layers:
+        layer_data.append(x['coreVectors'][l][:,:cv_size])
+    _d = torch.stack(layer_data, dim=1) 
+    _l = x['label']
     dd = _d.contiguous().view(_d.shape[0], _d.shape[1]*_d.shape[2])
     ll = _l.view(_l.shape[0], 1)
     return dd, ll
@@ -66,12 +68,9 @@ def gp_wrap(**kwargs):
             num_workers = 4,
             pin_memory = True,
             )
-        print('fetching')
         x, y = next(iter(cv_dl))
-        print('detaching')
         x, y = x.detach(), y.detach()
-        print('sizes: ', ss, x.shape, y.shape)
-        
+
     collate_fn = functools.partial(test_parser_fn, cv_size=cv_size)
     testloaders = {}
     for _k, _d in testsets.items():
@@ -177,7 +176,7 @@ if __name__ == '__main__':
         t0 = time()
         loss = gp_wrap(
                 **config,
-                target_layers,
+                target_layers = target_layers,
                 cv = cv,
                 testsets = testsets,
                 max_epochs = max_epochs,

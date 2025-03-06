@@ -155,14 +155,12 @@ if __name__ == '__main__':
     detector_configs = {
             'OCSVM': {
                 'cv_size': 100,
-                # 'cv_size': tune.randint(5, max_cv_size+1), 
                 'kernel': tune.choice(['linear', 'poly', 'rbf', 'sigmoid']),
                 'nu': tune.uniform(0.01, 1.0),
                 'max_iter': 10000, # we do not want this one in the final config
                 },
             'LOF': {
                 'cv_size': 100,
-                # 'cv_size': tune.randint(5, max_cv_size+1), 
                 'algorithm': tune.choice(['ball_tree', 'kd_tree']),
                 'leaf_size': tune.randint(5, 501),
                 'n_neighbors': tune.randint(2, 101),
@@ -170,13 +168,9 @@ if __name__ == '__main__':
                 },
             'IF': {
                 'cv_size': 100,
-                # 'cv_size': tune.randint(5, max_cv_size+1), 
                 'n_estimators': tune.randint(10, 501),
                 'n_jobs': tune.choice([64]),
                 }
-            # 'MD': {
-                # 'cv_size': tune.randint(5, max_cv_size+1), 
-                # }
             }
     
     #--------------------------------

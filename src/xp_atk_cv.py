@@ -78,7 +78,7 @@ if __name__ == '__main__':
     #--------------------------------
     ds_loaders = ds.get_dataset_loaders()
     loaders = {
-              # 'train': ds_loaders['train'],
+              'train': ds_loaders['train'],
               'test': ds_loaders['test']
               }
     loaders = trim_dataloaders(loaders, 0.2)
@@ -179,47 +179,42 @@ if __name__ == '__main__':
     # Corevectors original
     #--------------------------------
     
-    # cvs_path = f'/srv/newpenny/XAI/generated_data/toy_case_{dataset}/corevectors/{dataset}/{name_model}'
-    # corevecs = CoreVectors(
-    #     path = cvs_path,
-    #     name = cvs_name,
-    #     model = model,
-    #     )
-    # with corevecs as cv: 
-    #     # copy dataset to coreVect dataset
-    #     cv.get_coreVec_dataset(
-    #         loaders = loaders, 
-    #         verbose = verbose
-    #         ) 
+    cvs_path = f'/srv/newpenny/XAI/generated_data/toy_case_{dataset}/corevectors/{dataset}/{name_model}'
+    corevecs = CoreVectors(
+        path = cvs_path,
+        name = cvs_name,
+        model = model,
+        )
+    with corevecs as cv: 
+        # copy dataset to coreVect dataset
+        cv.get_coreVec_dataset(
+            loaders = loaders, 
+            verbose = verbose
+            ) 
     
-    #     cv.get_activations(
-    #             batch_size = bs,
-    #             loaders = loaders,
-    #             verbose = verbose
-    #             )
+        cv.get_activations(
+                batch_size = bs,
+                loaders = loaders,
+                verbose = verbose
+                )
     
-    #     cv.get_coreVectors(
-    #             batch_size = bs,
-    #             reduct_matrices = model._svds,
-    #             parser = parser_fn,
-    #             verbose = verbose
-    #             )
+        cv.get_coreVectors(
+                batch_size = bs,
+                reduct_matrices = model._svds,
+                parser = parser_fn,
+                verbose = verbose
+                )
     
-    #     # cv.normalize_corevectors(
-    #     #         wrt='train',
-    #     #         verbose=verbose,
-    #     #         to_file=Path(cvs_path)/(cvs_name+'.normalization.pt')
-    #     #         )
-    #     cv.normalize_corevectors(
-    #                     target_layers = target_layers,
-    #                     from_file=Path(f'/srv/newpenny/XAI/generated_data/corevectors/{dataset}/{name_model}/corevectors.normalization.pt'),
-    #                     verbose=True
-    #                     )
-
-
+        cv.normalize_corevectors(
+                wrt='train',
+                verbose=verbose,
+                to_file=Path(cvs_path)/(cvs_name+'.normalization.pt')
+                )
+        
     #--------------------------------
     # Corevectors attacks 
     #--------------------------------
+    
     for atk_type, atk_loader in atk_loaders.items():
         cvs_path_atk = f'/srv/newpenny/XAI/generated_data/toy_case_{dataset}/corevectors_attacks={atk_type}/{dataset}/{name_model}'
 
